@@ -25,3 +25,11 @@ dist-ssr
 
 # Helper batch files
 npm-run.cmd
+
+# Python backend
+backend/.venv/
+backend/venv/
+backend/__pycache__/
+*.pyc
+.env
+backend/.env
