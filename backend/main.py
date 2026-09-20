@@ -1,12 +1,17 @@
+import os
 from datetime import datetime
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
 from database import engine, SessionLocal, Base
 import models
 from routers import potholes, rover
 
+
 # Create DB tables automatically on startup
 Base.metadata.create_all(bind=engine)
+
 
 app = FastAPI(
     title="Autonomous Pothole Mapping API",
@@ -14,12 +19,27 @@ app = FastAPI(
     version="1.0.0",
 )
 
-# Configure CORS
+
+# ============================================================
+# CORS CONFIGURATION
+# ============================================================
+
 origins = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
     "http://localhost:3000",
 ]
+
+# Production frontend URL will be supplied through Vercel
+# environment variable:
+#
+# FRONTEND_URL=https://your-frontend.vercel.app
+#
+frontend_url = os.getenv("FRONTEND_URL")
+
+if frontend_url:
+    origins.append(frontend_url)
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -30,16 +50,28 @@ app.add_middleware(
 )
 
 
+# ============================================================
+# INITIAL DATABASE SEEDING
+# ============================================================
+
 def seed_initial_data():
     """Seed initial demo data if database is empty."""
+
     db = SessionLocal()
+
     try:
+        # ----------------------------------------------------
         # Seed initial rover status
+        # ----------------------------------------------------
+
         rover = (
             db.query(models.RoverStatus)
-            .filter(models.RoverStatus.rover_id == "ROVER-01")
+            .filter(
+                models.RoverStatus.rover_id == "ROVER-01"
+            )
             .first()
         )
+
         if not rover:
             initial_rover = models.RoverStatus(
                 rover_id="ROVER-01",
@@ -55,10 +87,16 @@ def seed_initial_data():
                 temperature=49.5,
                 updated_at=datetime.utcnow(),
             )
+
             db.add(initial_rover)
 
-        # Seed initial potholes if empty
+        # ----------------------------------------------------
+        # Seed initial potholes if database is empty
+        # ----------------------------------------------------
+
         if db.query(models.Pothole).count() == 0:
+
+            # Minor pothole
             minor_pothole = models.Pothole(
                 id="PTH-001",
                 rover_id="ROVER-01",
@@ -71,12 +109,15 @@ def seed_initial_data():
                 status="FILLED",
                 repair_method="AUTOMATIC_SAND_DISPENSING",
                 image_url=None,
-                inspection_notes="Sand dispensing auto-fill executed successfully",
+                inspection_notes=(
+                    "Sand dispensing auto-fill executed successfully"
+                ),
                 inspected_at=None,
                 repaired_at="2026-09-20T09:15:10Z",
                 created_at=datetime.utcnow(),
             )
 
+            # Major pothole
             major_pothole = models.Pothole(
                 id="PTH-002",
                 rover_id="ROVER-01",
@@ -99,26 +140,49 @@ def seed_initial_data():
             db.add(major_pothole)
 
         db.commit()
+
     finally:
         db.close()
 
+
+# ============================================================
+# APPLICATION STARTUP
+# ============================================================
 
 @app.on_event("startup")
 def on_startup():
     seed_initial_data()
 
 
+# ============================================================
+# HEALTH CHECK
+# ============================================================
+
 @app.get("/health", tags=["health"])
 def health_check():
-    return {"status": "ok"}
+    return {
+        "status": "ok"
+    }
 
 
-# Include routers
+# ============================================================
+# API ROUTERS
+# ============================================================
+
 app.include_router(potholes.router)
 app.include_router(rover.router)
 
 
+# ============================================================
+# LOCAL DEVELOPMENT SERVER
+# ============================================================
+
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run(
+        "main:app",
+        host="0.0.0.0",
+        port=8000,
+        reload=True,
+    )
